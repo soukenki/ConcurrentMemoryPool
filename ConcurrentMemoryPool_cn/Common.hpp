@@ -3,6 +3,7 @@
 
 #include <iostream>
 #include <vector>
+#include <unordered_map>
 #include <algorithm>
 
 #include <thread>
@@ -314,7 +315,7 @@ public:
 // 管理多个连续页大块内存跨度结构
 struct Span
 {
-	PAGE_ID _pageID = 0;         // 大块内存起始页的页号
+	PAGE_ID _pageId = 0;         // 大块内存起始页的页号
 	size_t _n = 0;               // 页的数量
 
 	Span* _next = nullptr;       // 双向链表的结构
@@ -322,6 +323,8 @@ struct Span
 
 	size_t _useCount = 0;        // 切好小块内存，被分配给thread cache的计数
 	void* _freeList = nullptr;   // 切好的小块内存的自由链表
+
+	bool _isUse = false;               // 是否在被使用
 };
 
 // 带头双向循环链表

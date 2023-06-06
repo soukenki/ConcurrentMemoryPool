@@ -3,7 +3,7 @@
 #include "Common.hpp"
 #include "ThreadCache.hpp"
 
-// 封装Allocate到TLS中
+// 封装TLS的创建
 static void* ConcurrentAlloc(size_t size)
 {
 	// 通过TLS 每个线程无锁的获取自己专属的ThreadCache对象
@@ -18,7 +18,7 @@ static void* ConcurrentAlloc(size_t size)
 }
 
 
-// 释放
+// 封装TLS的释放
 static void ConcurrentFree(void* ptr, size_t size)
 {
 	assert(pTLSThreadCache);

@@ -27,13 +27,14 @@ Span* CentralCache::GetOneSpan(SpanList& list, size_t size)
 	PageCache::GetInstance()->GetPageMtx().lock();  // 进入下一层前，上锁
 
 	Span* span = PageCache::GetInstance()->NewSpan(SizeClass::NumMovePage(size));
+	span->_isUse = true;
 	
 	PageCache::GetInstance()->GetPageMtx().unlock();   // 解锁
 
 	// 对获取的span进行切分，不需要加锁，因为这时其他线程无法访问这个span
 	
 	// 计算span的大块内存的起始地址和大块内存的大小（字节数）
-	char* start = (char*)(span->_pageID << PAGE_SHIFT);  // span页号 * 8k == span起始地址 
+	char* start = (char*)(span->_pageId << PAGE_SHIFT);  // span页号 * 8k == span起始地址 
 	size_t bytes = span->_n << PAGE_SHIFT;
 	char* end = start + bytes;
 
@@ -98,10 +99,41 @@ size_t CentralCache::FetchRangObj(void*& start, void*& end, size_t batchNum, siz
 void CentralCache::ReleaseListToSpans(void* start, size_t size)
 {
 	size_t index = SizeClass::Index(size);  // 桶位置
-	_spanLists[index].GetMtx().lock();      // 上锁
+	_spanLists[index].GetMtx().lock();      // 上锁 central cache
+
+	while (start)
+	{
+		void* next = NextObj(start);
+
+		Span* span = PageCache::GetInstance()->MapObjectToSpan(start);  // 找到映射的span
+		// 头插
+		NextObj(start) = span->_freeList;
+		span->_freeList = start;
+		span->_useCount--;
+
+		// 说明span切分出去的小块内存都回来了
+		// 这个span就可以还给page cache, page cache可以尝试去做前后页的合并
+		if (span->_useCount == 0)   
+		{
+			_spanLists[index].Erase(span);
+			span->_freeList = nullptr;
+			span->_next = nullptr;
+			span->_prev = nullptr;
+
+			// 传入span到page cache，用page cache的锁
+			// 这时把central cache解锁
+			_spanLists[index].GetMtx().unlock();      // 解锁 central cache
+
+			PageCache::GetInstance()->GetPageMtx().lock();  // 上锁 page cache
+			PageCache::GetInstance()->ReleaseSpanToPageCache(span);
+			PageCache::GetInstance()->GetPageMtx().unlock();  // 解锁 page cache
+
+			_spanLists[index].GetMtx().lock();      // 上锁 central cache
+		}
+
+		start = next;
+	}
 
 
-
-	_spanLists[index].GetMtx().unlock();      // 解锁
-
+	_spanLists[index].GetMtx().unlock();      // 解锁 central cache
 }
