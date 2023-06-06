@@ -2,7 +2,7 @@
 #include "ThreadCache.hpp"
 #include "CentralCache.hpp"
 
-// 到CentralCache取内存块
+// 到中央缓存central cache取内存块
 void* ThreadCache::FetchFromCentralCache(size_t index, size_t size)
 {
 	// 慢开始反馈调节算法
@@ -11,7 +11,7 @@ void* ThreadCache::FetchFromCentralCache(size_t index, size_t size)
 	// 3.size越大，一次向central cache要的batchNum就越越小
 	// 4.size越小，一次向central cache要的batchNum就越越大
 	
-	size_t batchNum = std::min(_freeLists[index].GetMaxSize(),SizeClass::NumMoveSize(size));  // 使用maxSize 与 NumMoveSize较小的那个 
+	size_t batchNum = min(_freeLists[index].GetMaxSize(),SizeClass::NumMoveSize(size));  // 使用maxSize 与 NumMoveSize较小的那个 
 
 	if (_freeLists[index].GetMaxSize() == batchNum)
 	{
@@ -22,7 +22,7 @@ void* ThreadCache::FetchFromCentralCache(size_t index, size_t size)
 	void* end = nullptr;
 	size_t actualNum = CentralCache::GetInstance()->FetchRangObj(start, end, batchNum, size);
 	// 每个span中空闲的内存块是不确定的，但至少有一个
-	assert(actualNum > 1);
+	assert(actualNum > 0);
 	if (actualNum == 1)
 	{
 		// 从CentralCache中只获取到一个内存块
@@ -32,7 +32,7 @@ void* ThreadCache::FetchFromCentralCache(size_t index, size_t size)
 	else
 	{
 		// 从CentralCache获取到多个内存块
-		_freeLists[index].pushRange(NextObj(start), end);  // 插入多个内存块
+		_freeLists[index].pushRange(NextObj(start), end, actualNum - 1);  // 插入多个内存块
 		return start;
 	}
 }
@@ -66,12 +66,22 @@ void ThreadCache::Deallocate(void* ptr, size_t size)
 	size_t index = SizeClass::Index(size);   // 几号桶
 	_freeLists[index].push(ptr);
 
-	// ..太多，往下一层释放
+	// 当链表长度大于一次批量申请的内存时，往central cache释放一段list
+	if (_freeLists[index].Size() >= _freeLists[index].GetMaxSize())
+	{
+		ListTooLong(_freeLists[index], size);
+	}
 }
 
-
-// 从中心缓存获取对象
-void* FetchFromCentralCache(size_t index, size_t size)
+// 释放对象时，链表太长时，回收内存到中央缓存
+void ThreadCache::ListTooLong(FreeList& list, size_t size)
 {
-	return nullptr;
+	void* start = nullptr;
+	void* end = nullptr;
+
+	// 指定size全部弹出
+	list.PopRange(start, end, list.GetMaxSize());
+
+	// 放到central cache
+	CentralCache::GetInstance()->ReleaseListToSpans(start, size);
 }

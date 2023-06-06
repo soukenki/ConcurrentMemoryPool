@@ -8,22 +8,9 @@
 	// linux下brk mmap等函数的头文件
 #endif
 
-// 直接去堆上按页申请空间
-inline static void* SystemAlloc(size_t kpage)
-{
-#ifdef _WIN32
-	void* ptr = VirtualAlloc(0, kpage << 13, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
-#else
-	// linux下brk mmap等函数
-#endif
 
-	if (ptr == nullptr)
-		throw std::bad_alloc();
 
-	return ptr;
-}
-
-// 固定長メモリプール
+// 固定大小的内存池
 template<class T>
 class ObjectPool
 {
@@ -86,7 +73,7 @@ public:
 private:
 	char* _memory = nullptr;     // 指向大块内存的指针
 	size_t _remainBytes = 0;     // 大块内存在切分后剩余字节数
-	void* _freeList = nullptr;   // freeしたメモリリスト
+	void* _freeList = nullptr;   // free了的链表
 
 
 };

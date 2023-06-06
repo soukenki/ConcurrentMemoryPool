@@ -18,6 +18,9 @@ public:
 	// 从中心缓存获取n个数量的对象给thread cache
 	size_t FetchRangObj(void*& start, void*& end, size_t batchNum, size_t size);
 
+	// 将一定数量的对象释放到span跨度
+	void ReleaseListToSpans(void* start, size_t byte_size);
+
 private: 
 	SpanList _spanLists[N_FREELIST];    // 哈希桶结构，每个桶有N个span
 
